@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Puppy SMS Gateway Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/dashboard.css" />
+</head>
+<body>
+<div class="shell">
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Puppy SMS Gateway</p>
+      <h1>Authenticated Environment Console</h1>
+      <p class="subtitle">Flow: register account, login, create environment, generate environment API key, then send SMS using that key.</p>
+    </div>
+    <div class="hero-right">
+      <span id="sessionBadge" class="session-badge">Not logged in</span>
+      <button id="logoutBtn" class="btn btn-danger hidden">Logout</button>
+    </div>
+  </header>
+
+  <div id="noticeBanner" class="banner banner-notice hidden"></div>
+  <div id="errorBanner" class="banner banner-error hidden"></div>
+
+  <section id="authPanel" class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Account Access</h2>
+        <p class="panel-subtitle">Create an account first, then login to manage environments and keys.</p>
+      </div>
+    </div>
+
+    <div class="auth-grid">
+      <form id="registerForm" class="form-card">
+        <h3>Register</h3>
+        <div class="form-grid">
+          <div class="field">
+            <label for="registerName">Name</label>
+            <input id="registerName" name="name" type="text" required minlength="2" />
+          </div>
+          <div class="field">
+            <label for="registerEmail">Email</label>
+            <input id="registerEmail" name="email" type="email" required />
+          </div>
+          <div class="field full">
+            <label for="registerPassword">Password</label>
+            <input id="registerPassword" name="password" type="password" required minlength="8" />
+          </div>
+          <div class="full inline-actions">
+            <button type="submit" class="btn btn-primary">Register</button>
+          </div>
+        </div>
+      </form>
+
+      <form id="loginForm" class="form-card">
+        <h3>Login</h3>
+        <div class="form-grid">
+          <div class="field">
+            <label for="loginEmail">Email</label>
+            <input id="loginEmail" name="email" type="email" required />
+          </div>
+          <div class="field">
+            <label for="loginPassword">Password</label>
+            <input id="loginPassword" name="password" type="password" required />
+          </div>
+          <div class="full inline-actions">
+            <button type="submit" class="btn btn-primary">Login</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section id="workspacePanel" class="panel hidden">
+    <div class="panel-head">
+      <div>
+        <h2>Environments</h2>
+        <p class="panel-subtitle">Create environments and key pairs. Keys are scoped to each environment.</p>
+      </div>
+      <button id="reloadWorkspaceBtn" class="btn">Reload</button>
+    </div>
+
+    <form id="createEnvironmentForm" class="form-grid">
+      <div class="field">
+        <label for="envName">Environment Name</label>
+        <input id="envName" name="name" type="text" required minlength="2" placeholder="Production" />
+      </div>
+      <div class="field">
+        <label for="envPin">PIN</label>
+        <input id="envPin" name="pin" type="text" required minlength="3" placeholder="1234" />
+      </div>
+      <div class="field">
+        <label for="envDescription">Description</label>
+        <input id="envDescription" name="description" type="text" placeholder="Main Android gateway" />
+      </div>
+      <div class="field">
+        <label for="envMetadata">Metadata JSON (Optional)</label>
+        <input id="envMetadata" name="metadata" type="text" placeholder='{"region":"us"}' />
+      </div>
+      <div class="full inline-actions">
+        <button type="submit" class="btn btn-primary">Create Environment</button>
+      </div>
+    </form>
+
+    <div id="environmentList" class="environment-grid"></div>
+  </section>
+
+  <section id="smsPanel" class="panel hidden">
+    <div class="panel-head">
+      <div>
+        <h2>Send SMS</h2>
+        <p class="panel-subtitle">Choose an environment key and send via the connected device for that environment PIN.</p>
+      </div>
+    </div>
+
+    <form id="sendSmsForm" class="form-grid">
+      <div class="field">
+        <label for="smsEnvironmentSelect">Environment</label>
+        <select id="smsEnvironmentSelect"></select>
+      </div>
+      <div class="field">
+        <label for="smsKnownKeySelect">Known API Key</label>
+        <select id="smsKnownKeySelect"></select>
+      </div>
+      <div class="field full">
+        <label for="smsApiKeyInput">API Key (required)</label>
+        <input id="smsApiKeyInput" type="text" placeholder="psg_..." required />
+      </div>
+      <div class="field full">
+        <label for="smsToInput">Recipients</label>
+        <input id="smsToInput" type="text" placeholder="+14075550123, +14075550124" required />
+      </div>
+      <div class="field full">
+        <label for="smsMessageInput">Message</label>
+        <textarea id="smsMessageInput" required placeholder="Type SMS message"></textarea>
+      </div>
+      <div class="full inline-actions">
+        <button type="submit" class="btn btn-primary">Send SMS</button>
+      </div>
+    </form>
+
+    <div id="smsResult" class="result-box hidden"></div>
+  </section>
+
+  <section id="statusPanel" class="panel hidden">
+    <div class="panel-head">
+      <div>
+        <h2>Status Lookup</h2>
+        <p class="panel-subtitle">Lookup status updates by request ID using bearer auth or an environment API key.</p>
+      </div>
+    </div>
+
+    <form id="statusForm" class="form-grid">
+      <div class="field">
+        <label for="statusRequestId">Request ID</label>
+        <input id="statusRequestId" type="text" required />
+      </div>
+      <div class="field">
+        <label for="statusApiKey">API Key (Optional)</label>
+        <input id="statusApiKey" type="text" placeholder="Use bearer token if empty" />
+      </div>
+      <div class="full inline-actions">
+        <button type="submit" class="btn btn-primary">Fetch Status</button>
+      </div>
+    </form>
+
+    <div id="statusResult" class="result-box hidden"></div>
+  </section>
+
+  <section id="dashboardPanel" class="panel hidden">
+    <div class="panel-head">
+      <div>
+        <h2>Account Activity</h2>
+        <p class="panel-subtitle">Live health plus account-scoped devices and logs.</p>
+      </div>
+      <div class="inline-actions">
+        <label class="switch">
+          <input id="autoRefreshToggle" type="checkbox" checked />
+          Auto Refresh
+        </label>
+        <button id="refreshDashboardBtn" class="btn btn-primary">Refresh</button>
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <article class="stat-card">
+        <p class="stat-label">Connected Devices</p>
+        <p id="statConnectedDevices" class="stat-value">0</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">Pending Requests</p>
+        <p id="statPendingRequests" class="stat-value">0</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">My Devices</p>
+        <p id="statMyDevices" class="stat-value">0</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">My Logs</p>
+        <p id="statMyLogs" class="stat-value">0</p>
+      </article>
+    </div>
+
+    <div class="split-grid">
+      <section class="form-card">
+        <div class="panel-head">
+          <h3>Devices</h3>
+          <input id="deviceSearch" type="text" placeholder="Search by pin, device name, ip" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+            <tr>
+              <th>PIN</th>
+              <th>Device</th>
+              <th>IP</th>
+              <th>Status</th>
+              <th>Last Seen</th>
+            </tr>
+            </thead>
+            <tbody id="devicesBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="form-card">
+        <div class="panel-head">
+          <h3>Logs</h3>
+          <input id="logSearch" type="text" placeholder="Search type, message, request id" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>PIN</th>
+              <th>Message</th>
+            </tr>
+            </thead>
+            <tbody id="logsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section id="managementPanel" class="panel hidden">
+    <div class="panel-head">
+      <div>
+        <h2>Super Admin Dashboard</h2>
+        <p class="panel-subtitle">Manage registration access, admin accounts, users, and global gateway activity.</p>
+      </div>
+      <span id="managementRoleBadge" class="role-chip">USER</span>
+    </div>
+
+    <div class="dashboard-grid">
+      <article class="stat-card">
+        <p class="stat-label">All Users</p>
+        <p id="mgStatUsers" class="stat-value">0</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">Super Admins</p>
+        <p id="mgStatSuperAdmins" class="stat-value">0</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">Admins</p>
+        <p id="mgStatAdmins" class="stat-value">0</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">Normal Users</p>
+        <p id="mgStatNormalUsers" class="stat-value">0</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">All Environments</p>
+        <p id="mgStatEnvironments" class="stat-value">0</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">All API Keys</p>
+        <p id="mgStatApiKeys" class="stat-value">0</p>
+      </article>
+    </div>
+
+    <section class="form-card">
+      <div class="panel-head">
+        <h3>Platform Controls</h3>
+      </div>
+      <form id="registrationToggleForm" class="inline-actions">
+        <label class="switch">
+          <input id="registrationEnabledToggle" type="checkbox" />
+          Registration Enabled
+        </label>
+        <button id="saveRegistrationSettingsBtn" type="submit" class="btn btn-primary">Save</button>
+      </form>
+      <div class="muted small">Only super admin can change registration state.</div>
+    </section>
+
+    <div class="split-grid" style="margin-top:10px;">
+      <section class="form-card">
+        <div class="panel-head">
+          <h3>Create User/Admin</h3>
+        </div>
+        <form id="createManagedUserForm" class="form-grid">
+          <div class="field">
+            <label for="managedCreateName">Name</label>
+            <input id="managedCreateName" name="name" type="text" required minlength="2" />
+          </div>
+          <div class="field">
+            <label for="managedCreateEmail">Email</label>
+            <input id="managedCreateEmail" name="email" type="email" required />
+          </div>
+          <div class="field">
+            <label for="managedCreatePassword">Password</label>
+            <input id="managedCreatePassword" name="password" type="password" required minlength="8" />
+          </div>
+          <div class="field">
+            <label for="managedCreateRole">Role</label>
+            <select id="managedCreateRole" name="role">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="managedCreateActive">Status</label>
+            <select id="managedCreateActive" name="isActive">
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </div>
+          <div class="full inline-actions">
+            <button type="submit" class="btn btn-primary">Create Account</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="form-card">
+        <div class="panel-head">
+          <h3>Update User</h3>
+        </div>
+        <form id="updateManagedUserForm" class="form-grid">
+          <input id="managedUpdateUserId" type="hidden" />
+          <div class="field">
+            <label for="managedUpdateName">Name</label>
+            <input id="managedUpdateName" name="name" type="text" required minlength="2" />
+          </div>
+          <div class="field">
+            <label for="managedUpdateEmail">Email</label>
+            <input id="managedUpdateEmail" name="email" type="email" required />
+          </div>
+          <div class="field">
+            <label for="managedUpdatePassword">Password (Optional)</label>
+            <input id="managedUpdatePassword" name="password" type="password" minlength="8" />
+          </div>
+          <div class="field">
+            <label for="managedUpdateRole">Role</label>
+            <select id="managedUpdateRole" name="role">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+              <option value="super_admin">Super Admin</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="managedUpdateActive">Status</label>
+            <select id="managedUpdateActive" name="isActive">
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </div>
+          <div class="full inline-actions">
+            <button type="submit" class="btn btn-primary">Update User</button>
+            <button id="clearManagedUpdateBtn" type="button" class="btn">Clear</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <section class="form-card" style="margin-top:10px;">
+      <div class="panel-head">
+        <h3>Users</h3>
+        <div class="inline-actions">
+          <input id="managedUserSearch" type="text" placeholder="Search name or email" />
+          <select id="managedUserRoleFilter">
+            <option value="">All Roles</option>
+            <option value="super_admin">Super Admin</option>
+            <option value="admin">Admin</option>
+            <option value="user">User</option>
+          </select>
+          <button id="managedUserRefreshBtn" type="button" class="btn">Refresh</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Action</th>
+          </tr>
+          </thead>
+          <tbody id="managedUsersBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="split-grid" style="margin-top:10px;">
+      <section class="form-card">
+        <div class="panel-head">
+          <h3>Global Devices</h3>
+          <input id="adminDeviceSearch" type="text" placeholder="Search pin, device, ip" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+            <tr>
+              <th>PIN</th>
+              <th>Device</th>
+              <th>IP</th>
+              <th>Status</th>
+              <th>Last Seen</th>
+            </tr>
+            </thead>
+            <tbody id="adminDevicesBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="form-card">
+        <div class="panel-head">
+          <h3>Global Logs</h3>
+          <input id="adminLogSearch" type="text" placeholder="Search type, request id, message" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>PIN</th>
+              <th>Message</th>
+            </tr>
+            </thead>
+            <tbody id="adminLogsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </section>
+</div>
+
+<script src="/assets/js/dashboard.js"></script>
+</body>
+</html>

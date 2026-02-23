@@ -11,10 +11,18 @@ dotenv.config();
 
 const {
     registerUser,
+    createInitialSuperAdmin,
     authenticateUser,
     createSessionForUser,
     getUserBySessionToken,
     revokeSessionToken,
+    hasSuperAdmin,
+    isRegistrationEnabled,
+    setRegistrationEnabled,
+    listUsersForManagement,
+    createManagedUser,
+    updateManagedUser,
+    getManagementSummary,
     listEnvironmentsByUser,
     findEnvironmentByPin,
     createEnvironmentForUser,
@@ -23,6 +31,7 @@ const {
     revokeApiKeyForEnvironment,
     resolveApiKeyContext,
     getPinsForUser,
+    isAdminRole,
 } = require('./store');
 
 const HOST = process.env.HOST || '0.0.0.0';
@@ -36,6 +45,9 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
+app.get('/dashboard', (_req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'dashboard.html'));
+});
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
@@ -143,6 +155,22 @@ const requireAuth = asyncHandler(async (req, res, next) => {
     req.authToken = token;
     next();
 });
+
+const requireAdmin = (req, res, next) => {
+    if (!req.auth?.user || !isAdminRole(req.auth.user.role)) {
+        res.status(403).json({ ok: false, error: 'forbidden' });
+        return;
+    }
+    next();
+};
+
+const requireSuperAdmin = (req, res, next) => {
+    if (!req.auth?.user || String(req.auth.user.role || '') !== 'super_admin') {
+        res.status(403).json({ ok: false, error: 'forbidden' });
+        return;
+    }
+    next();
+};
 
 function getClientIp(req) {
     const forwarded = req.headers['x-forwarded-for'];
@@ -381,7 +409,12 @@ app.post('/api/auth/register', asyncHandler(async (req, res) => {
     const { name, email, password } = req.body || {};
     const result = await registerUser({ name, email, password });
     if (!result.ok) {
-        res.status(422).json({ ok: false, error: result.error });
+        const statusByError = {
+            bootstrap_required: 409,
+            registration_disabled: 403,
+        };
+        const statusCode = statusByError[result.error] || 422;
+        res.status(statusCode).json({ ok: false, error: result.error });
         return;
     }
 
@@ -389,6 +422,45 @@ app.post('/api/auth/register', asyncHandler(async (req, res) => {
         ok: true,
         user: result.user,
         next: 'login_required',
+    });
+}));
+
+app.get('/api/public/bootstrap-status', asyncHandler(async (_req, res) => {
+    const [superAdminExists, registrationEnabled] = await Promise.all([
+        hasSuperAdmin(),
+        isRegistrationEnabled(),
+    ]);
+
+    res.json({
+        ok: true,
+        hasSuperAdmin: superAdminExists,
+        registrationEnabled,
+    });
+}));
+
+app.post('/api/public/bootstrap-super-admin', asyncHandler(async (req, res) => {
+    const { name, email, password } = req.body || {};
+    const result = await createInitialSuperAdmin({ name, email, password });
+    if (!result.ok) {
+        const statusByError = {
+            super_admin_already_exists: 409,
+            invalid_name: 422,
+            invalid_email: 422,
+            invalid_role: 422,
+            password_too_short: 422,
+            email_already_exists: 422,
+        };
+        res.status(statusByError[result.error] || 422).json({ ok: false, error: result.error });
+        return;
+    }
+
+    const session = await createSessionForUser(result.user.id);
+    res.status(201).json({
+        ok: true,
+        user: result.user,
+        token: session.token,
+        expiresAt: session.expiresAt,
+        next: 'dashboard',
     });
 }));
 
@@ -403,12 +475,7 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
     const session = await createSessionForUser(authResult.user.id);
     res.json({
         ok: true,
-        user: {
-            id: authResult.user.id,
-            name: authResult.user.name,
-            email: authResult.user.email,
-            createdAt: authResult.user.createdAt,
-        },
+        user: authResult.user,
         token: session.token,
         expiresAt: session.expiresAt,
     });
@@ -512,7 +579,133 @@ app.get('/api/account/logs', requireAuth, asyncHandler(async (req, res) => {
     res.json({ ok: true, logs: filterLogsByPins(gatewayLogs, pinsSet) });
 }));
 
-app.get('/health', (_req, res) => {
+app.get('/api/admin/summary', requireAuth, requireAdmin, asyncHandler(async (_req, res) => {
+    const summary = await getManagementSummary();
+    res.json({
+        ok: true,
+        summary: {
+            ...summary,
+            runtime: {
+                connectedDevices: devicesByPin.size,
+                pendingRequests: pendingByRequestId.size,
+                totalLogsInMemory: gatewayLogs.length,
+            },
+        },
+    });
+}));
+
+app.get('/api/admin/settings', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const registrationEnabled = await isRegistrationEnabled();
+    res.json({
+        ok: true,
+        settings: {
+            registrationEnabled,
+        },
+        permissions: {
+            canToggleRegistration: String(req.auth.user.role || '') === 'super_admin',
+        },
+    });
+}));
+
+app.patch('/api/admin/settings/registration', requireAuth, requireSuperAdmin, asyncHandler(async (req, res) => {
+    const enabled = req.body?.enabled;
+    if (typeof enabled !== 'boolean') {
+        res.status(422).json({ ok: false, error: 'invalid_enabled_value' });
+        return;
+    }
+
+    const registrationEnabled = await setRegistrationEnabled(enabled);
+    res.json({
+        ok: true,
+        settings: {
+            registrationEnabled,
+        },
+    });
+}));
+
+app.get('/api/admin/users', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const search = String(req.query.search || '').trim();
+    const role = String(req.query.role || '').trim();
+    const isActive = String(req.query.isActive || '').trim();
+    const limit = Number(req.query.limit || 500);
+
+    const result = await listUsersForManagement({
+        search,
+        role,
+        isActive: isActive ? isActive : null,
+        limit,
+    });
+
+    if (!result.ok) {
+        res.status(422).json({ ok: false, error: result.error });
+        return;
+    }
+
+    let users = result.users;
+    if (String(req.auth.user.role || '') === 'admin') {
+        users = users.filter((user) => user.role === 'user' || user.id === req.auth.user.id);
+    }
+
+    res.json({ ok: true, users });
+}));
+
+app.post('/api/admin/users', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const result = await createManagedUser(req.auth.user, req.body || {});
+    if (!result.ok) {
+        const statusByError = {
+            forbidden: 403,
+            forbidden_role_assignment: 403,
+            invalid_name: 422,
+            invalid_email: 422,
+            invalid_role: 422,
+            password_too_short: 422,
+            email_already_exists: 422,
+        };
+        res.status(statusByError[result.error] || 422).json({ ok: false, error: result.error });
+        return;
+    }
+
+    res.status(201).json({ ok: true, user: result.user });
+}));
+
+app.patch('/api/admin/users/:userId', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const userId = String(req.params.userId || '').trim();
+    const result = await updateManagedUser(req.auth.user, userId, req.body || {});
+    if (!result.ok) {
+        const statusByError = {
+            forbidden: 403,
+            forbidden_role_assignment: 403,
+            cannot_deactivate_self: 422,
+            cannot_remove_last_super_admin: 422,
+            cannot_disable_last_super_admin: 422,
+            user_not_found: 404,
+            invalid_user_id: 422,
+            invalid_name: 422,
+            invalid_email: 422,
+            invalid_role: 422,
+            password_too_short: 422,
+            email_already_exists: 422,
+        };
+        res.status(statusByError[result.error] || 422).json({ ok: false, error: result.error });
+        return;
+    }
+
+    res.json({ ok: true, user: result.user });
+}));
+
+app.get('/api/admin/devices', requireAuth, requireAdmin, (_req, res) => {
+    res.json({
+        ok: true,
+        devices: normalizeDevicesForResponse(Array.from(devicesByPin.values())),
+    });
+});
+
+app.get('/api/admin/logs', requireAuth, requireAdmin, (_req, res) => {
+    res.json({ ok: true, logs: gatewayLogs });
+});
+
+app.get('/health', asyncHandler(async (_req, res) => {
+    const registrationEnabled = await isRegistrationEnabled();
     res.json({
         ok: true,
         service: 'puppy-sms-gateway-server',
@@ -522,8 +715,9 @@ app.get('/health', (_req, res) => {
         uptimeSec: Math.round(process.uptime()),
         authEnabled: true,
         environmentApiKeysOnly: true,
+        registrationEnabled,
     });
-});
+}));
 
 app.get('/api/devices', asyncHandler(async (req, res) => {
     const auth = await getOptionalAuthUser(req);

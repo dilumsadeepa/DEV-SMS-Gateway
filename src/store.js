@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { getPool } = require('./db');
 
 const SESSION_TTL_DAYS = Number(process.env.SESSION_TTL_DAYS || 30);
+const USER_ROLES = new Set(['super_admin', 'admin', 'user']);
 
 function toIso(value) {
     if (!value) {
@@ -39,6 +40,43 @@ function normalizeEmail(email) {
     return String(email || '').trim().toLowerCase();
 }
 
+function normalizeRole(role, fallback = 'user') {
+    const value = String(role || '').trim().toLowerCase();
+    if (USER_ROLES.has(value)) {
+        return value;
+    }
+    return fallback;
+}
+
+function isValidRole(role) {
+    return USER_ROLES.has(String(role || '').trim().toLowerCase());
+}
+
+function isAdminRole(role) {
+    const normalized = normalizeRole(role, 'user');
+    return normalized === 'super_admin' || normalized === 'admin';
+}
+
+function coerceBoolean(value, fallback = false) {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    if (typeof value === 'number') {
+        return value === 1;
+    }
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) {
+        return fallback;
+    }
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+        return true;
+    }
+    if (['0', 'false', 'no', 'off'].includes(normalized)) {
+        return false;
+    }
+    return fallback;
+}
+
 function isValidEmail(email) {
     const value = normalizeEmail(email);
     return value.length > 3 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -70,7 +108,10 @@ function sanitizeUser(user) {
         id: user.id,
         name: user.name,
         email: user.email,
+        role: normalizeRole(user.role, 'user'),
+        isActive: Boolean(user.is_active ?? user.isActive ?? true),
         createdAt: toIso(user.created_at || user.createdAt),
+        updatedAt: toIso(user.updated_at || user.updatedAt),
     };
 }
 
@@ -105,10 +146,121 @@ async function cleanupExpiredSessions() {
     await getPool().query('DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP(3)');
 }
 
-async function registerUser({ name, email, password }) {
-    const normalizedEmail = normalizeEmail(email);
-    const safeName = String(name || '').trim();
-    const safePassword = String(password || '');
+async function getGatewaySetting(settingKey) {
+    const safeKey = String(settingKey || '').trim();
+    if (!safeKey) {
+        return null;
+    }
+
+    const [rows] = await getPool().query(
+        `SELECT setting_value
+         FROM gateway_settings
+         WHERE setting_key = ?
+         LIMIT 1`,
+        [safeKey]
+    );
+
+    return rows[0] ? String(rows[0].setting_value || '') : null;
+}
+
+async function setGatewaySetting(settingKey, settingValue) {
+    const safeKey = String(settingKey || '').trim();
+    if (!safeKey) {
+        return;
+    }
+
+    await getPool().query(
+        `INSERT INTO gateway_settings (setting_key, setting_value, updated_at)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+            setting_value = VALUES(setting_value),
+            updated_at = VALUES(updated_at)`,
+        [safeKey, String(settingValue || ''), new Date()]
+    );
+}
+
+async function isRegistrationEnabled() {
+    const setting = await getGatewaySetting('registration_enabled');
+    if (setting === null) {
+        return true;
+    }
+    return coerceBoolean(setting, true);
+}
+
+async function setRegistrationEnabled(enabled) {
+    const normalized = coerceBoolean(enabled, true);
+    await setGatewaySetting('registration_enabled', normalized ? '1' : '0');
+    return normalized;
+}
+
+async function countUsersByRole(role, activeOnly = false) {
+    const normalizedRole = normalizeRole(role, 'user');
+    const conditions = ['role = ?'];
+    const params = [normalizedRole];
+
+    if (activeOnly) {
+        conditions.push('is_active = 1');
+    }
+
+    const [rows] = await getPool().query(
+        `SELECT COUNT(*) AS count
+         FROM users
+         WHERE ${conditions.join(' AND ')}`,
+        params
+    );
+
+    return Number(rows?.[0]?.count || 0);
+}
+
+async function countAllUsers() {
+    const [rows] = await getPool().query('SELECT COUNT(*) AS count FROM users');
+    return Number(rows?.[0]?.count || 0);
+}
+
+async function hasSuperAdmin() {
+    return (await countUsersByRole('super_admin')) > 0;
+}
+
+function canActorAssignRole(actorRole, desiredRole) {
+    const safeActorRole = normalizeRole(actorRole, 'user');
+    const safeDesiredRole = normalizeRole(desiredRole, 'user');
+
+    if (safeActorRole === 'super_admin') {
+        return isValidRole(safeDesiredRole);
+    }
+
+    if (safeActorRole === 'admin') {
+        return safeDesiredRole === 'user';
+    }
+
+    return false;
+}
+
+function canActorManageTarget(actor, target) {
+    const actorRole = normalizeRole(actor?.role, 'user');
+    const targetRole = normalizeRole(target?.role, 'user');
+
+    if (actorRole === 'super_admin') {
+        return true;
+    }
+
+    if (actorRole === 'admin') {
+        if (String(actor?.id || '') === String(target?.id || '')) {
+            return true;
+        }
+        return targetRole === 'user';
+    }
+
+    return false;
+}
+
+async function createUserRecord(payload) {
+    const normalizedEmail = normalizeEmail(payload?.email);
+    const safeName = String(payload?.name || '').trim();
+    const safePassword = String(payload?.password || '');
+    const desiredRole = normalizeRole(payload?.role, 'user');
+    const isActive = coerceBoolean(payload?.isActive, true);
+    const autoPromoteFirstSuperAdmin = Boolean(payload?.autoPromoteFirstSuperAdmin);
 
     if (!safeName || safeName.length < 2) {
         return { ok: false, error: 'invalid_name' };
@@ -119,6 +271,9 @@ async function registerUser({ name, email, password }) {
     if (safePassword.length < 8) {
         return { ok: false, error: 'password_too_short' };
     }
+    if (!isValidRole(desiredRole)) {
+        return { ok: false, error: 'invalid_role' };
+    }
 
     const pool = getPool();
     const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
@@ -126,21 +281,45 @@ async function registerUser({ name, email, password }) {
         return { ok: false, error: 'email_already_exists' };
     }
 
+    let assignedRole = desiredRole;
+    if (autoPromoteFirstSuperAdmin && assignedRole === 'user') {
+        const superAdminCount = await countUsersByRole('super_admin');
+        if (superAdminCount === 0) {
+            assignedRole = 'super_admin';
+        }
+    }
+
     const { salt, hash } = hashPassword(safePassword);
+    const createdAt = new Date();
+    const updatedAt = createdAt;
+
     const user = {
         id: crypto.randomUUID(),
         name: safeName,
         email: normalizedEmail,
+        role: assignedRole,
+        isActive,
         passwordSalt: salt,
         passwordHash: hash,
-        createdAt: new Date(),
+        createdAt,
+        updatedAt,
     };
 
     try {
         await pool.query(
-            `INSERT INTO users (id, name, email, password_salt, password_hash, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [user.id, user.name, user.email, user.passwordSalt, user.passwordHash, user.createdAt]
+            `INSERT INTO users (id, name, email, role, is_active, password_salt, password_hash, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                user.id,
+                user.name,
+                user.email,
+                user.role,
+                user.isActive ? 1 : 0,
+                user.passwordSalt,
+                user.passwordHash,
+                user.createdAt,
+                user.updatedAt,
+            ]
         );
     } catch (error) {
         if (error && error.code === 'ER_DUP_ENTRY') {
@@ -155,16 +334,54 @@ async function registerUser({ name, email, password }) {
             id: user.id,
             name: user.name,
             email: user.email,
+            role: user.role,
+            is_active: user.isActive ? 1 : 0,
             created_at: user.createdAt,
+            updated_at: user.updatedAt,
         }),
     };
+}
+
+async function registerUser({ name, email, password }) {
+    if (!(await hasSuperAdmin())) {
+        return { ok: false, error: 'bootstrap_required' };
+    }
+
+    const registrationEnabled = await isRegistrationEnabled();
+    if (!registrationEnabled) {
+        return { ok: false, error: 'registration_disabled' };
+    }
+
+    return createUserRecord({
+        name,
+        email,
+        password,
+        role: 'user',
+        isActive: true,
+        autoPromoteFirstSuperAdmin: false,
+    });
+}
+
+async function createInitialSuperAdmin({ name, email, password }) {
+    if (await hasSuperAdmin()) {
+        return { ok: false, error: 'super_admin_already_exists' };
+    }
+
+    return createUserRecord({
+        name,
+        email,
+        password,
+        role: 'super_admin',
+        isActive: true,
+        autoPromoteFirstSuperAdmin: false,
+    });
 }
 
 async function authenticateUser({ email, password }) {
     const normalizedEmail = normalizeEmail(email);
     const safePassword = String(password || '');
     const [rows] = await getPool().query(
-        `SELECT id, name, email, password_salt, password_hash, created_at
+        `SELECT id, name, email, role, is_active, password_salt, password_hash, created_at, updated_at
          FROM users
          WHERE email = ?
          LIMIT 1`,
@@ -176,18 +393,17 @@ async function authenticateUser({ email, password }) {
         return { ok: false, error: 'invalid_credentials' };
     }
 
+    if (!Boolean(user.is_active)) {
+        return { ok: false, error: 'user_inactive' };
+    }
+
     if (!verifyPassword(safePassword, user.password_salt, user.password_hash)) {
         return { ok: false, error: 'invalid_credentials' };
     }
 
     return {
         ok: true,
-        user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            createdAt: toIso(user.created_at),
-        },
+        user: sanitizeUser(user),
     };
 }
 
@@ -233,10 +449,15 @@ async function getUserBySessionToken(token) {
             u.id AS user_id,
             u.name AS user_name,
             u.email AS user_email,
-            u.created_at AS user_created_at
+            u.role AS user_role,
+            u.is_active AS user_is_active,
+            u.created_at AS user_created_at,
+            u.updated_at AS user_updated_at
          FROM sessions s
          INNER JOIN users u ON u.id = s.user_id
-         WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP(3)
+         WHERE s.token_hash = ?
+            AND s.expires_at > UTC_TIMESTAMP(3)
+            AND u.is_active = 1
          LIMIT 1`,
         [tokenHash]
     );
@@ -250,7 +471,10 @@ async function getUserBySessionToken(token) {
         id: row.user_id,
         name: row.user_name,
         email: row.user_email,
+        role: row.user_role,
+        is_active: row.user_is_active,
         created_at: row.user_created_at,
+        updated_at: row.user_updated_at,
     };
 
     return {
@@ -266,7 +490,10 @@ async function getUserBySessionToken(token) {
             id: user.id,
             name: user.name,
             email: user.email,
+            role: normalizeRole(user.role, 'user'),
+            isActive: Boolean(user.is_active),
             createdAt: toIso(user.created_at),
+            updatedAt: toIso(user.updated_at),
         },
     };
 }
@@ -278,6 +505,271 @@ async function revokeSessionToken(token) {
     }
     const tokenHash = sha256(safeToken);
     await getPool().query('DELETE FROM sessions WHERE token_hash = ?', [tokenHash]);
+}
+
+async function listUsersForManagement({ search = '', role = '', isActive = null, limit = 500 } = {}) {
+    const safeSearch = String(search || '').trim();
+    const safeRole = String(role || '').trim();
+    const safeLimit = Math.max(1, Math.min(1000, Number(limit || 500)));
+
+    const conditions = [];
+    const params = [];
+
+    if (safeSearch) {
+        conditions.push('(name LIKE ? OR email LIKE ?)');
+        const pattern = `%${safeSearch}%`;
+        params.push(pattern, pattern);
+    }
+
+    if (safeRole) {
+        const normalizedRole = normalizeRole(safeRole, '');
+        if (!isValidRole(normalizedRole)) {
+            return { ok: false, error: 'invalid_role_filter' };
+        }
+        conditions.push('role = ?');
+        params.push(normalizedRole);
+    }
+
+    if (isActive !== null && isActive !== undefined && String(isActive).trim() !== '') {
+        conditions.push('is_active = ?');
+        params.push(coerceBoolean(isActive, true) ? 1 : 0);
+    }
+
+    const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const [rows] = await getPool().query(
+        `SELECT id, name, email, role, is_active, created_at, updated_at
+         FROM users
+         ${whereSql}
+         ORDER BY created_at DESC
+         LIMIT ?`,
+        [...params, safeLimit]
+    );
+
+    return {
+        ok: true,
+        users: rows.map(sanitizeUser),
+    };
+}
+
+async function getUserById(userId) {
+    const safeUserId = String(userId || '').trim();
+    if (!safeUserId) {
+        return null;
+    }
+
+    const [rows] = await getPool().query(
+        `SELECT id, name, email, role, is_active, created_at, updated_at
+         FROM users
+         WHERE id = ?
+         LIMIT 1`,
+        [safeUserId]
+    );
+
+    return rows[0] ? sanitizeUser(rows[0]) : null;
+}
+
+async function createManagedUser(actor, payload) {
+    if (!isAdminRole(actor?.role)) {
+        return { ok: false, error: 'forbidden' };
+    }
+
+    const desiredRole = normalizeRole(payload?.role, 'user');
+    if (!canActorAssignRole(actor.role, desiredRole)) {
+        return { ok: false, error: 'forbidden_role_assignment' };
+    }
+
+    return createUserRecord({
+        name: payload?.name,
+        email: payload?.email,
+        password: payload?.password,
+        role: desiredRole,
+        isActive: coerceBoolean(payload?.isActive, true),
+        autoPromoteFirstSuperAdmin: false,
+    });
+}
+
+async function updateManagedUser(actor, userId, payload) {
+    if (!isAdminRole(actor?.role)) {
+        return { ok: false, error: 'forbidden' };
+    }
+
+    const safeUserId = String(userId || '').trim();
+    if (!safeUserId) {
+        return { ok: false, error: 'invalid_user_id' };
+    }
+
+    const [targetRows] = await getPool().query(
+        `SELECT id, name, email, role, is_active, created_at, updated_at
+         FROM users
+         WHERE id = ?
+         LIMIT 1`,
+        [safeUserId]
+    );
+
+    const target = targetRows[0];
+    if (!target) {
+        return { ok: false, error: 'user_not_found' };
+    }
+
+    if (!canActorManageTarget(actor, target)) {
+        return { ok: false, error: 'forbidden' };
+    }
+
+    const actorRole = normalizeRole(actor.role, 'user');
+    const targetRole = normalizeRole(target.role, 'user');
+    const targetId = String(target.id);
+    const actorId = String(actor.id || '');
+
+    const updates = [];
+    const values = [];
+
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'name')) {
+        const name = String(payload.name || '').trim();
+        if (!name || name.length < 2) {
+            return { ok: false, error: 'invalid_name' };
+        }
+        updates.push('name = ?');
+        values.push(name);
+    }
+
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'email')) {
+        const normalizedEmail = normalizeEmail(payload.email);
+        if (!isValidEmail(normalizedEmail)) {
+            return { ok: false, error: 'invalid_email' };
+        }
+
+        if (normalizedEmail !== normalizeEmail(target.email)) {
+            const [existingRows] = await getPool().query(
+                `SELECT id
+                 FROM users
+                 WHERE email = ? AND id <> ?
+                 LIMIT 1`,
+                [normalizedEmail, targetId]
+            );
+            if (existingRows.length > 0) {
+                return { ok: false, error: 'email_already_exists' };
+            }
+        }
+
+        updates.push('email = ?');
+        values.push(normalizedEmail);
+    }
+
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'password')) {
+        const safePassword = String(payload.password || '');
+        if (!safePassword || safePassword.length < 8) {
+            return { ok: false, error: 'password_too_short' };
+        }
+
+        const { salt, hash } = hashPassword(safePassword);
+        updates.push('password_salt = ?', 'password_hash = ?');
+        values.push(salt, hash);
+    }
+
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'role')) {
+        if (actorRole !== 'super_admin') {
+            return { ok: false, error: 'forbidden_role_assignment' };
+        }
+
+        const desiredRole = normalizeRole(payload.role, '');
+        if (!isValidRole(desiredRole)) {
+            return { ok: false, error: 'invalid_role' };
+        }
+
+        if (targetRole === 'super_admin' && desiredRole !== 'super_admin') {
+            const activeSuperAdminCount = await countUsersByRole('super_admin', true);
+            if (activeSuperAdminCount <= 1) {
+                return { ok: false, error: 'cannot_remove_last_super_admin' };
+            }
+        }
+
+        updates.push('role = ?');
+        values.push(desiredRole);
+    }
+
+    let shouldRevokeSessions = false;
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'isActive')) {
+        const desiredIsActive = coerceBoolean(payload.isActive, true);
+
+        if (actorId === targetId && !desiredIsActive) {
+            return { ok: false, error: 'cannot_deactivate_self' };
+        }
+
+        if (!desiredIsActive && targetRole === 'super_admin') {
+            const activeSuperAdminCount = await countUsersByRole('super_admin', true);
+            if (activeSuperAdminCount <= 1) {
+                return { ok: false, error: 'cannot_disable_last_super_admin' };
+            }
+        }
+
+        updates.push('is_active = ?');
+        values.push(desiredIsActive ? 1 : 0);
+        shouldRevokeSessions = !desiredIsActive;
+    }
+
+    if (updates.length === 0) {
+        return { ok: true, user: sanitizeUser(target) };
+    }
+
+    updates.push('updated_at = ?');
+    values.push(new Date());
+
+    values.push(targetId);
+    await getPool().query(
+        `UPDATE users
+         SET ${updates.join(', ')}
+         WHERE id = ?`,
+        values
+    );
+
+    if (shouldRevokeSessions) {
+        await getPool().query('DELETE FROM sessions WHERE user_id = ?', [targetId]);
+    }
+
+    const user = await getUserById(targetId);
+    return { ok: true, user };
+}
+
+async function getManagementSummary() {
+    const pool = getPool();
+    const [userRows] = await pool.query(
+        `SELECT
+            COUNT(*) AS total_users,
+            SUM(CASE WHEN role = 'super_admin' THEN 1 ELSE 0 END) AS super_admins,
+            SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) AS admins,
+            SUM(CASE WHEN role = 'user' THEN 1 ELSE 0 END) AS users,
+            SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active_users,
+            SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) AS inactive_users
+         FROM users`
+    );
+
+    const [environmentRows] = await pool.query('SELECT COUNT(*) AS total_environments FROM environments');
+    const [keyRows] = await pool.query(
+        `SELECT
+            COUNT(*) AS total_api_keys,
+            SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active_api_keys
+         FROM api_keys`
+    );
+
+    const registrationEnabled = await isRegistrationEnabled();
+
+    return {
+        users: {
+            total: Number(userRows?.[0]?.total_users || 0),
+            superAdmins: Number(userRows?.[0]?.super_admins || 0),
+            admins: Number(userRows?.[0]?.admins || 0),
+            users: Number(userRows?.[0]?.users || 0),
+            active: Number(userRows?.[0]?.active_users || 0),
+            inactive: Number(userRows?.[0]?.inactive_users || 0),
+        },
+        resources: {
+            environments: Number(environmentRows?.[0]?.total_environments || 0),
+            apiKeys: Number(keyRows?.[0]?.total_api_keys || 0),
+            activeApiKeys: Number(keyRows?.[0]?.active_api_keys || 0),
+        },
+        registrationEnabled,
+    };
 }
 
 async function listEnvironmentsByUser(userId) {
@@ -506,7 +998,10 @@ async function resolveApiKeyContext(rawApiKey) {
             u.id AS user_id,
             u.name AS user_name,
             u.email AS user_email,
+            u.role AS user_role,
+            u.is_active AS user_is_active,
             u.created_at AS user_created_at,
+            u.updated_at AS user_updated_at,
             e.id AS env_id,
             e.user_id AS env_user_id,
             e.name AS env_name,
@@ -518,7 +1013,9 @@ async function resolveApiKeyContext(rawApiKey) {
          FROM api_keys ak
          INNER JOIN users u ON u.id = ak.user_id
          INNER JOIN environments e ON e.id = ak.environment_id
-         WHERE ak.key_hash = ? AND ak.is_active = 1
+         WHERE ak.key_hash = ?
+            AND ak.is_active = 1
+            AND u.is_active = 1
          LIMIT 1`,
         [keyHash]
     );
@@ -531,12 +1028,15 @@ async function resolveApiKeyContext(rawApiKey) {
     const now = new Date();
     await pool.query('UPDATE api_keys SET last_used_at = ? WHERE id = ?', [now, row.api_key_id]);
 
-    const user = {
+    const user = sanitizeUser({
         id: row.user_id,
         name: row.user_name,
         email: row.user_email,
-        createdAt: toIso(row.user_created_at),
-    };
+        role: row.user_role,
+        is_active: row.user_is_active,
+        created_at: row.user_created_at,
+        updated_at: row.user_updated_at,
+    });
 
     const environment = sanitizeEnvironment({
         id: row.env_id,
@@ -593,10 +1093,19 @@ async function getPinsForUser(userId) {
 
 module.exports = {
     registerUser,
+    createInitialSuperAdmin,
     authenticateUser,
     createSessionForUser,
     getUserBySessionToken,
     revokeSessionToken,
+    hasSuperAdmin,
+    isRegistrationEnabled,
+    setRegistrationEnabled,
+    listUsersForManagement,
+    getUserById,
+    createManagedUser,
+    updateManagedUser,
+    getManagementSummary,
     listEnvironmentsByUser,
     getEnvironmentForUser,
     findEnvironmentByPin,
@@ -606,6 +1115,7 @@ module.exports = {
     revokeApiKeyForEnvironment,
     resolveApiKeyContext,
     getPinsForUser,
+    isAdminRole,
     sanitizeEnvironment,
     sanitizeApiKey,
     sanitizeUser,

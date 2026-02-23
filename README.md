@@ -1,38 +1,65 @@
 # Puppy SMS Gateway Server
 
-This server accepts WebSocket device connections from Android phones and exposes:
-- account auth (`register/login`)
-- per-account environments
-- per-environment API keys
-- SMS send/status APIs
+Puppy SMS Gateway Server accepts Android device WebSocket connections and provides:
+- multi-user SMS gateway access
+- environment-scoped API keys
+- role-based management (`super_admin`, `admin`, `user`)
+- super admin dashboard controls
 
-Persistence is backed by MySQL with SQL migrations in `migrations/`.
+Persistence is backed by MySQL and SQL migrations in `migrations/`.
+
+## Role Model
+- `super_admin`
+  - full platform access
+  - can enable/disable public registration
+  - can create/update `admin` and `user` accounts
+  - can manage all users/devices/logs/resources
+- `admin`
+  - can create and manage `user` accounts
+  - can view platform-wide users/devices/logs/resources (role-limited)
+- `user`
+  - can manage own environments and API keys
+  - can send SMS using environment API keys
 
 ## Features
-- WebSocket device channel: `ws://<host>:8090/ws/device?pin=<environment-pin>&deviceId=...`
-- Auth APIs: `/api/auth/register`, `/api/auth/login`, `/api/auth/me`, `/api/auth/logout`
+- Device WebSocket channel: `ws://<host>:8090/ws/device?pin=<environment-pin>&deviceId=...`
 - Environment APIs: `/api/environments`, `/api/environments/:environmentId/api-keys`
-- SMS send API: `POST /api/send-sms` (auth via environment API key)
-- Request status API: `GET /api/status/:requestId`
-- Account-scoped device/log views: `/api/account/devices`, `/api/account/logs`
-- Dashboard: `GET /` (global view; bearer token optionally scopes logs/devices)
+- SMS send API: `POST /api/send-sms` (environment API key required)
+- Delivery status API: `GET /api/status/:requestId`
+- Account views: `/api/account/devices`, `/api/account/logs`
+- Admin APIs:
+  - `/api/admin/summary`
+  - `/api/admin/settings`
+  - `/api/admin/settings/registration`
+  - `/api/admin/users`
+  - `/api/admin/devices`
+  - `/api/admin/logs`
+- Public bootstrap APIs:
+  - `/api/public/bootstrap-status`
+  - `/api/public/bootstrap-super-admin`
+- UI:
+  - Landing page: `GET /`
+    - if no super admin: shows **Get Started** flow
+    - if super admin exists: shows **Login/Register** buttons
+  - Dashboard app: `GET /dashboard`
+    - account workspace (environments/keys/sms)
+    - super admin/admin management console
 
-## Requirements
-- Node.js 18+ (or newer)
-- npm
-- MySQL 8+ (or compatible)
-
-## Installation
+## Setup
 ```bash
-git clone https://github.com/dilumsadeepa/DEV-SMS-Gateway.git
-cd DEV-SMS-Gateway
+cd /home/ilabs-dilum/Projects/smsGateway/puppy-sms-gateway-server
 cp .env.example .env
 npm install
 npm run migrate
 npm start
 ```
 
-Server default URL: `http://localhost:8090`
+`npm start` also runs migrations automatically.
+
+After start:
+1. Open `http://localhost:8090/`
+2. If no super admin exists, click **Get Started** and create first super admin
+3. You will be redirected to dashboard automatically
 
 ## MySQL Bootstrap (Example)
 ```sql
@@ -59,36 +86,11 @@ HEARTBEAT_INTERVAL_MS=15000
 HEARTBEAT_TIMEOUT_MS=90000
 ```
 
-`npm start` also runs migrations automatically before starting the server.
+## API Examples
 
-## API
 ### Health
 ```bash
 curl http://localhost:8090/health
-```
-
-### Register
-```bash
-curl -X POST http://localhost:8090/api/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "name": "Alice",
-    "email": "alice@example.com",
-    "password": "StrongPass123"
-  }'
-```
-
-Register only creates the user account.  
-Login is required to get a bearer token for protected account APIs.
-
-### Login
-```bash
-curl -X POST http://localhost:8090/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "email": "alice@example.com",
-    "password": "StrongPass123"
-  }'
 ```
 
 ### Create Environment
@@ -104,15 +106,7 @@ curl -X POST http://localhost:8090/api/environments \
   }'
 ```
 
-This returns a default environment API key (`apiKey`) for SMS sending.
-
-### Create Additional Environment API Key
-```bash
-curl -X POST http://localhost:8090/api/environments/<environmentId>/api-keys \
-  -H "Authorization: Bearer <auth-token>" \
-  -H 'Content-Type: application/json' \
-  -d '{ "name": "backend-service" }'
-```
+Response includes default `apiKey` for the environment.
 
 ### Send SMS (Environment API Key)
 ```bash
@@ -125,22 +119,9 @@ curl -X POST http://localhost:8090/api/send-sms \
   }'
 ```
 
-`to` can be a single string, comma-separated string, or array.  
-Environment API key is mandatory.  
-`pin` is optional and, when provided, must match the environment linked to the API key.
+`pin` is optional and, if provided, must match the API key environment.
 
-Response contains `requestId` and `statusUrl` for polling:
-
-```json
-{
-  "ok": false,
-  "requestId": "f281f7c4-ca5b-4f8d-b6c3-c3e2ce640d2a",
-  "error": "device_response_timeout",
-  "statusUrl": "/api/status/f281f7c4-ca5b-4f8d-b6c3-c3e2ce640d2a"
-}
-```
-
-### Delivery Status
+### Status Polling
 ```bash
 curl http://localhost:8090/api/status/<requestId> \
   -H "Authorization: Bearer <auth-token>"
@@ -149,19 +130,33 @@ curl http://localhost:8090/api/status/<requestId> \
   -H 'x-api-key: <environment-api-key>'
 ```
 
-Returns lifecycle updates like `queued`, `sent_part_success`, `delivery_complete_success`, etc.
-
-### Account-Scoped Devices and Logs
+### Super Admin Toggle Registration
 ```bash
-curl http://localhost:8090/api/account/devices \
-  -H "Authorization: Bearer <auth-token>"
-
-curl http://localhost:8090/api/account/logs \
-  -H "Authorization: Bearer <auth-token>"
+curl -X PATCH http://localhost:8090/api/admin/settings/registration \
+  -H "Authorization: Bearer <super-admin-token>" \
+  -H 'Content-Type: application/json' \
+  -d '{ "enabled": false }'
 ```
+
+### Admin/Super Admin Create User
+```bash
+curl -X POST http://localhost:8090/api/admin/users \
+  -H "Authorization: Bearer <admin-or-super-admin-token>" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Operator",
+    "email": "operator@example.com",
+    "password": "StrongPass123",
+    "role": "user",
+    "isActive": true
+  }'
+```
+
+## Auth Endpoints
+Login/register endpoints exist and are used by the dashboard, but direct request examples are intentionally omitted from this README.
 
 ## Notes
 - Keep environment API keys private.
 - If multiple phones connect with the same PIN, the latest connection replaces the previous one.
-- The server waits for device delivery ack until `REQUEST_TIMEOUT_MS`.
-- Only registered environment PINs are accepted for device websocket connections.
+- Only registered environment PINs are accepted for device WebSocket connections.
+- First account can bootstrap as `super_admin` when no super admin exists.
