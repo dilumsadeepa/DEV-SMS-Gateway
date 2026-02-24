@@ -1,0 +1,278 @@
+.header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.stat-card {
+  border: 1px solid #dbe3ed;
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.stat-label {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.stat-value {
+  margin: 6px 0 0;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.filters-grid .field {
+  min-width: 0;
+}
+
+.filters-grid input,
+.filters-grid select {
+  min-width: 0;
+}
+
+.filters-grid input[type="datetime-local"] {
+  min-width: 0;
+  width: 100%;
+}
+
+.stacked-panel {
+  margin-top: 14px;
+}
+
+.status-pill {
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.status-pill.ok {
+  border-color: #86efac;
+  color: #166534;
+  background: #f0fdf4;
+}
+
+.status-pill.warn {
+  border-color: #fcd34d;
+  color: #92400e;
+  background: #fffbeb;
+}
+
+.status-pill.err {
+  border-color: #fca5a5;
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.btn.btn-small {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.logs-actions-cell {
+  min-width: 110px;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.modal-panel {
+  position: relative;
+  width: min(920px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.35);
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.modal-body {
+  padding: 14px 16px 16px;
+}
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.analysis-card {
+  border: 1px solid #dbe3ed;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.analysis-card h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.analysis-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: #334155;
+  padding: 2px 0;
+}
+
+.analysis-row strong {
+  color: #0f172a;
+}
+
+.analysis-section {
+  margin-top: 12px;
+}
+
+.analysis-section h4 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.analysis-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.analysis-list li {
+  margin: 0 0 6px;
+  color: #334155;
+}
+
+.analysis-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #dbe3ed;
+  border-radius: 10px;
+}
+
+.analysis-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+}
+
+.analysis-table th,
+.analysis-table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  font-size: 13px;
+}
+
+.analysis-table th {
+  background: #f8fafc;
+  color: #334155;
+}
+
+.analysis-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.analysis-segment-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+}
+
+.analysis-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 10px;
+  color: #475569;
+  background: #f8fafc;
+}
+
+@media (max-width: 680px) {
+  .header-actions {
+    width: 100%;
+  }
+}
+
+@media (max-width: 1280px) {
+  .filters-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .filters-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .modal {
+    padding: 10px;
+  }
+
+  .modal-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .analysis-table {
+    min-width: 460px;
+  }
+}

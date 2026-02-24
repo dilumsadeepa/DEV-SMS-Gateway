@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Puppy SMS Gateway | Device Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/css/console-layout.css" />
+  <link rel="stylesheet" href="/assets/css/device-simulator.css" />
+</head>
+<body>
+<div class="console-shell">
+  <aside class="sidebar">
+    <a href="/command-panel" class="sidebar-brand">Puppy SMS Gateway</a>
+    <nav class="sidebar-nav">
+      <a href="/command-panel" data-nav="command">Command Panel</a>
+      <a href="/account-activity" data-nav="activity">Account Activity</a>
+      <a href="/super-admin-dashboard" data-nav="admin">Super Admin Dashboard</a>
+      <a href="/device-simulator" data-nav="simulator">Device Simulator</a>
+    </nav>
+    <div class="sidebar-meta">
+      <p id="sessionBadge" class="session-badge">Not logged in</p>
+      <button id="logoutBtn" class="btn btn-danger" type="button">Logout</button>
+    </div>
+  </aside>
+
+  <main class="console-main">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Realtime Device</p>
+        <h1>Device Simulator</h1>
+        <p class="subtitle">Real-device style SMS window with live websocket connection.</p>
+      </div>
+      <div class="inline-actions">
+        <span id="simConnectionBadge" class="status-pill warn">disconnected</span>
+      </div>
+    </header>
+
+    <div id="noticeBanner" class="banner banner-notice hidden"></div>
+    <div id="errorBanner" class="banner banner-error hidden"></div>
+
+    <section class="panel">
+      <div class="sim-stage">
+        <div class="sim-controls">
+          <div class="panel-head">
+            <div>
+              <h2>Connection</h2>
+              <p class="panel-subtitle">Set PIN and optional mobile filter. Only matching recipients appear in chat.</p>
+            </div>
+          </div>
+
+          <form id="simConfigForm" class="form-grid" onsubmit="return false;">
+            <label class="field">
+              <span>PIN</span>
+              <input id="simPin" type="text" required placeholder="1234" />
+            </label>
+
+            <label class="field">
+              <span>Device ID</span>
+              <input id="simDeviceId" type="text" required placeholder="web-sim-01" />
+            </label>
+
+            <label class="field">
+              <span>Device Name</span>
+              <input id="simDeviceName" type="text" required placeholder="Web Simulator" />
+            </label>
+
+            <label class="field">
+              <span>Mobile Number Filter (Optional)</span>
+              <input id="simMobileFilter" type="text" placeholder="+14155552671" />
+            </label>
+
+            <div class="field">
+              <span>Appearance</span>
+              <label class="switch">
+                <input id="simThemeToggle" type="checkbox" />
+                Dark Device Theme
+              </label>
+            </div>
+
+            <div class="field">
+              <span>Auto Acknowledge</span>
+              <label class="switch">
+                <input id="simAutoAcknowledge" type="checkbox" checked />
+                Send `sms_status` + `sms_result`
+              </label>
+            </div>
+
+            <div class="field full action-row">
+              <button id="simConnectBtn" class="btn btn-primary" type="button">Connect</button>
+              <button id="simDisconnectBtn" class="btn" type="button">Disconnect</button>
+              <button id="simClearBtn" class="btn" type="button">Clear Messages</button>
+            </div>
+          </form>
+
+          <div class="sim-counts">
+            <span class="pill">Matched: <strong id="simMatchedCount">0</strong></span>
+          </div>
+
+          <div class="sim-lists-grid">
+            <article class="sim-list-card">
+              <h3>Matched</h3>
+              <div id="simMatchedList" class="sim-list-content"></div>
+            </article>
+          </div>
+        </div>
+
+        <div class="device-preview-wrap">
+          <div id="simPhoneFrame" class="device-preview">
+            <div class="device-notch"></div>
+            <div class="phone-screen">
+              <div class="phone-status-row">
+                <span id="simPhoneClock">09:41</span>
+                <span class="phone-icons">5G 100%</span>
+              </div>
+
+              <div class="chat-header">
+                <div class="chat-avatar"></div>
+                <div class="chat-header-meta">
+                  <strong id="simHeaderName">Web Simulator</strong>
+                  <span id="simHeaderState">Offline</span>
+                </div>
+                <button class="chat-close-btn" type="button" aria-label="Close preview">x</button>
+              </div>
+
+              <div id="simChatMessages" class="chat-messages"></div>
+
+              <div class="chat-compose">
+                <div class="compose-input">Write anything...</div>
+                <button class="compose-send-btn" type="button" aria-label="Send preview">^</button>
+              </div>
+
+              <div class="keyboard-preview">
+                <div class="key-row">
+                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <div class="key-row">
+                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <div class="key-row short">
+                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Socket Events</h2>
+      </div>
+      <pre id="simEvents" class="result-box"></pre>
+    </section>
+  </main>
+</div>
+
+<script src="/assets/js/app-common.js"></script>
+<script src="/assets/js/device-simulator.js"></script>
+</body>
+</html>

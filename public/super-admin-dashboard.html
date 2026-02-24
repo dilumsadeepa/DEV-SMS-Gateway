@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Puppy SMS Gateway | Super Admin Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/css/console-layout.css" />
+  <link rel="stylesheet" href="/assets/css/super-admin.css" />
+</head>
+<body>
+<div class="console-shell">
+  <aside class="sidebar">
+    <a href="/command-panel" class="sidebar-brand">Puppy SMS Gateway</a>
+    <nav class="sidebar-nav">
+      <a href="/command-panel" data-nav="command">Command Panel</a>
+      <a href="/account-activity" data-nav="activity">Account Activity</a>
+      <a href="/super-admin-dashboard" data-nav="admin">Super Admin Dashboard</a>
+      <a href="/device-simulator" data-nav="simulator">Device Simulator</a>
+    </nav>
+    <div class="sidebar-meta">
+      <p id="sessionBadge" class="session-badge">Not logged in</p>
+      <button id="logoutBtn" class="btn btn-danger" type="button">Logout</button>
+    </div>
+  </aside>
+
+  <main class="console-main">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Administration</p>
+        <h1>Super Admin Dashboard</h1>
+        <p class="subtitle">Manage registration, admins/users, and global gateway activity.</p>
+      </div>
+      <span id="managementRoleBadge" class="role-chip">USER</span>
+    </header>
+
+    <div id="noticeBanner" class="banner banner-notice hidden"></div>
+    <div id="errorBanner" class="banner banner-error hidden"></div>
+
+    <section class="panel">
+      <div class="summary-grid">
+        <article class="stat-card">
+          <p class="stat-label">All Users</p>
+          <p id="mgStatUsers" class="stat-value">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Super Admins</p>
+          <p id="mgStatSuperAdmins" class="stat-value">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Admins</p>
+          <p id="mgStatAdmins" class="stat-value">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Users</p>
+          <p id="mgStatNormalUsers" class="stat-value">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Environments</p>
+          <p id="mgStatEnvironments" class="stat-value">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">API Keys</p>
+          <p id="mgStatApiKeys" class="stat-value">0</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Platform Controls</h2>
+      </div>
+      <form id="registrationToggleForm" class="inline-actions">
+        <label class="switch">
+          <input id="registrationEnabledToggle" type="checkbox" />
+          Registration Enabled
+        </label>
+        <button id="saveRegistrationSettingsBtn" type="submit" class="btn btn-primary">Save</button>
+        <button id="managedUserRefreshBtn" type="button" class="btn">Refresh</button>
+      </form>
+      <p class="panel-subtitle">Only super admin can change registration state.</p>
+
+      <form id="logRetentionForm" class="inline-actions controls-row">
+        <label class="field retention-field">
+          <span>Log Retention Days</span>
+          <input id="logRetentionDaysInput" type="number" min="1" max="365" step="1" value="2" />
+        </label>
+        <button id="saveLogRetentionBtn" type="submit" class="btn btn-primary">Save Retention</button>
+        <button id="clearLogsBtn" type="button" class="btn btn-danger">Delete Logs Now</button>
+      </form>
+      <p class="panel-subtitle">Logs are auto deleted after retention days. Default is 2 days.</p>
+    </section>
+
+    <section class="panel">
+      <div class="management-grid">
+        <form id="createManagedUserForm" class="card-block">
+          <h3>Create User/Admin</h3>
+          <div class="form-grid">
+            <label class="field">
+              <span>Name</span>
+              <input id="managedCreateName" name="name" type="text" required minlength="2" />
+            </label>
+            <label class="field">
+              <span>Email</span>
+              <input id="managedCreateEmail" name="email" type="email" required />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input id="managedCreatePassword" name="password" type="password" required minlength="8" />
+            </label>
+            <label class="field">
+              <span>Role</span>
+              <select id="managedCreateRole" name="role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Status</span>
+              <select id="managedCreateActive" name="isActive">
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </label>
+            <div class="field full action-row">
+              <button type="submit" class="btn btn-primary">Create Account</button>
+            </div>
+          </div>
+        </form>
+
+        <form id="updateManagedUserForm" class="card-block">
+          <h3>Update User</h3>
+          <input id="managedUpdateUserId" type="hidden" />
+          <div class="form-grid">
+            <label class="field">
+              <span>Name</span>
+              <input id="managedUpdateName" type="text" required minlength="2" />
+            </label>
+            <label class="field">
+              <span>Email</span>
+              <input id="managedUpdateEmail" type="email" required />
+            </label>
+            <label class="field">
+              <span>Password (Optional)</span>
+              <input id="managedUpdatePassword" type="password" minlength="8" />
+            </label>
+            <label class="field">
+              <span>Role</span>
+              <select id="managedUpdateRole">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+                <option value="super_admin">Super Admin</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Status</span>
+              <select id="managedUpdateActive">
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </label>
+            <div class="field full action-row">
+              <button type="submit" class="btn btn-primary">Update User</button>
+              <button id="clearManagedUpdateBtn" class="btn" type="button">Clear</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Users</h2>
+        <div class="inline-actions">
+          <input id="managedUserSearch" type="text" placeholder="Search name or email" />
+          <select id="managedUserRoleFilter">
+            <option value="">All Roles</option>
+            <option value="super_admin">Super Admin</option>
+            <option value="admin">Admin</option>
+            <option value="user">User</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Action</th>
+          </tr>
+          </thead>
+          <tbody id="managedUsersBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel stacked-panel">
+      <div class="panel-head">
+        <h2>Global Devices</h2>
+        <input id="adminDeviceSearch" type="text" placeholder="Search pin, device, ip" />
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+          <tr>
+            <th>PIN</th>
+            <th>Device</th>
+            <th>IP</th>
+            <th>Status</th>
+            <th>Last Seen</th>
+          </tr>
+          </thead>
+          <tbody id="adminDevicesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel stacked-panel">
+      <div class="panel-head">
+        <h2>Global Logs</h2>
+        <input id="adminLogSearch" type="text" placeholder="Search type, request id, content" />
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+          <tr>
+            <th>Time</th>
+            <th>Type</th>
+            <th>PIN</th>
+            <th>Message</th>
+          </tr>
+          </thead>
+          <tbody id="adminLogsBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="/assets/js/app-common.js"></script>
+<script src="/assets/js/super-admin-dashboard.js"></script>
+</body>
+</html>

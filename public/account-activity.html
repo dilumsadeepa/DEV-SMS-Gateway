@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Puppy SMS Gateway | Account Activity</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/css/console-layout.css" />
+  <link rel="stylesheet" href="/assets/css/account-activity.css" />
+</head>
+<body>
+<div class="console-shell">
+  <aside class="sidebar">
+    <a href="/command-panel" class="sidebar-brand">Puppy SMS Gateway</a>
+    <nav class="sidebar-nav">
+      <a href="/command-panel" data-nav="command">Command Panel</a>
+      <a href="/account-activity" data-nav="activity">Account Activity</a>
+      <a href="/super-admin-dashboard" data-nav="admin">Super Admin Dashboard</a>
+      <a href="/device-simulator" data-nav="simulator">Device Simulator</a>
+    </nav>
+    <div class="sidebar-meta">
+      <p id="sessionBadge" class="session-badge">Not logged in</p>
+      <button id="logoutBtn" class="btn btn-danger" type="button">Logout</button>
+    </div>
+  </aside>
+
+  <main class="console-main">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Activity</p>
+        <h1>Account Activity</h1>
+        <p class="subtitle">Responsive activity view with filters by status, mobile number, content, and time.</p>
+      </div>
+      <div class="header-actions">
+        <label class="switch">
+          <input id="autoRefreshToggle" type="checkbox" checked />
+          Auto Refresh
+        </label>
+        <button id="refreshDashboardBtn" class="btn btn-primary" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <div id="noticeBanner" class="banner banner-notice hidden"></div>
+    <div id="errorBanner" class="banner banner-error hidden"></div>
+
+    <section class="panel">
+      <div class="stats-grid">
+        <article class="stat-card">
+          <p class="stat-label">Connected Devices</p>
+          <p id="statConnectedDevices" class="stat-value">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Pending Requests</p>
+          <p id="statPendingRequests" class="stat-value">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">My Devices</p>
+          <p id="statMyDevices" class="stat-value">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">My Logs</p>
+          <p id="statMyLogs" class="stat-value">0</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Filters</h2>
+      </div>
+
+      <form id="activityFilterForm" class="filters-grid" onsubmit="return false;">
+        <label class="field">
+          <span>Environment</span>
+          <select id="environmentFilter">
+            <option value="all">All Environments</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Device Status</span>
+          <select id="deviceStatusFilter">
+            <option value="all">All</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Status / Type</span>
+          <select id="logStatusFilter">
+            <option value="all">All</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Mobile Number</span>
+          <input id="mobileFilter" type="text" placeholder="+1407..." />
+        </label>
+
+        <label class="field">
+          <span>Content</span>
+          <input id="contentFilter" type="text" placeholder="message or error" />
+        </label>
+
+        <label class="field">
+          <span>From Time</span>
+          <input id="fromTime" type="datetime-local" />
+        </label>
+
+        <label class="field">
+          <span>To Time</span>
+          <input id="toTime" type="datetime-local" />
+        </label>
+
+        <div class="field full action-row">
+          <button id="resetFiltersBtn" class="btn" type="button">Reset Filters</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel stacked-panel">
+      <div class="panel-head">
+        <h2>Devices</h2>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+          <tr>
+            <th>PIN</th>
+            <th>Device</th>
+            <th>IP</th>
+            <th>Status</th>
+            <th>Last Seen</th>
+          </tr>
+          </thead>
+          <tbody id="devicesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel stacked-panel">
+      <div class="panel-head">
+        <h2>Logs</h2>
+        <div class="inline-actions">
+          <button id="saveLogsBtn" class="btn" type="button">Save Logs To Database</button>
+          <button id="deleteLogsBtn" class="btn btn-danger" type="button">Delete Logs</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+          <tr>
+            <th>Time</th>
+            <th>Status / Type</th>
+            <th>Mobile</th>
+            <th>Content</th>
+            <th>PIN</th>
+            <th>Actions</th>
+          </tr>
+          </thead>
+          <tbody id="logsBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="smsAnalysisModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="smsAnalysisTitle">
+  <div class="modal-backdrop" data-close-analysis-modal="true"></div>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <h3 id="smsAnalysisTitle">SMS Analysis Details</h3>
+      <button id="closeSmsAnalysisBtn" class="btn" type="button">Close</button>
+    </div>
+    <div id="smsAnalysisContent" class="modal-body"></div>
+  </div>
+</div>
+
+<script src="/assets/js/app-common.js"></script>
+<script src="/assets/js/account-activity.js"></script>
+</body>
+</html>

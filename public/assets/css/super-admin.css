@@ -1,0 +1,67 @@
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.stat-card {
+  border: 1px solid #dbe3ed;
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.stat-label {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.stat-value {
+  margin: 6px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.management-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.card-block {
+  border: 1px solid #dbe3ed;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.card-block h3 {
+  margin: 0 0 10px;
+}
+
+.stacked-panel {
+  margin-top: 14px;
+}
+
+.controls-row {
+  margin-top: 10px;
+}
+
+.retention-field {
+  min-width: 220px;
+}
+
+.retention-field input {
+  width: 120px;
+}
+
+@media (max-width: 980px) {
+  .management-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .retention-field input {
+    width: 100%;
+  }
+}

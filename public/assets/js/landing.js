@@ -115,7 +115,7 @@
 
       persistSession(result);
       showNotice("Super admin created. Redirecting...");
-      window.location.href = "/dashboard";
+      window.location.href = "/super-admin-dashboard";
     } catch (error) {
       if (error.message === "super_admin_already_exists") {
         await loadBootstrapState();

@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Puppy SMS Gateway | Command Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/css/console-layout.css" />
+  <link rel="stylesheet" href="/assets/css/command-panel.css" />
+</head>
+<body>
+<div class="console-shell">
+  <aside class="sidebar">
+    <a href="/command-panel" class="sidebar-brand">Puppy SMS Gateway</a>
+    <nav class="sidebar-nav">
+      <a href="/command-panel" data-nav="command">Command Panel</a>
+      <a href="/account-activity" data-nav="activity">Account Activity</a>
+      <a href="/super-admin-dashboard" data-nav="admin">Super Admin Dashboard</a>
+      <a href="/device-simulator" data-nav="simulator">Device Simulator</a>
+    </nav>
+    <div class="sidebar-meta">
+      <p id="sessionBadge" class="session-badge">Not logged in</p>
+      <button id="logoutBtn" class="btn btn-danger" type="button">Logout</button>
+    </div>
+  </aside>
+
+  <main class="console-main">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Command Admin Panel</p>
+        <h1>Environments, Send SMS, Status Lookup</h1>
+        <p class="subtitle">Manage environment keys and run SMS commands from one page.</p>
+      </div>
+      <button id="reloadWorkspaceBtn" class="btn" type="button">Reload</button>
+    </header>
+
+    <div id="noticeBanner" class="banner banner-notice hidden"></div>
+    <div id="errorBanner" class="banner banner-error hidden"></div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Environments</h2>
+          <p class="panel-subtitle">Create environments and manage API keys by environment.</p>
+        </div>
+      </div>
+
+      <form id="createEnvironmentForm" class="form-grid">
+        <label class="field">
+          <span>Environment Name</span>
+          <input id="envName" name="name" type="text" required minlength="2" placeholder="Production" />
+        </label>
+
+        <label class="field">
+          <span>PIN</span>
+          <input id="envPin" name="pin" type="text" required minlength="3" placeholder="1234" />
+        </label>
+
+        <label class="field">
+          <span>Description</span>
+          <input id="envDescription" name="description" type="text" placeholder="Main Android gateway" />
+        </label>
+
+        <label class="field">
+          <span>Metadata JSON (Optional)</span>
+          <input id="envMetadata" name="metadata" type="text" placeholder='{"region":"us"}' />
+        </label>
+
+        <div class="field full action-row">
+          <button type="submit" class="btn btn-primary">Create Environment</button>
+        </div>
+      </form>
+
+      <div id="environmentList" class="environment-grid"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Send SMS</h2>
+          <p class="panel-subtitle">Choose an environment key and send SMS through connected phone.</p>
+        </div>
+        <div class="inline-actions">
+          <button id="openDeviceSimulatorBtn" class="btn" type="button">Open Device Simulator</button>
+        </div>
+      </div>
+
+      <form id="sendSmsForm" class="form-grid">
+        <label class="field">
+          <span>Environment</span>
+          <select id="smsEnvironmentSelect"></select>
+        </label>
+
+        <label class="field">
+          <span>Known API Key</span>
+          <select id="smsKnownKeySelect"></select>
+        </label>
+
+        <label class="field">
+          <span>Simulator Mobile Filter (Optional)</span>
+          <input id="simulatorMobileFilter" type="text" placeholder="+14155552671" />
+        </label>
+
+        <label class="field full">
+          <span>API Key</span>
+          <input id="smsApiKeyInput" type="text" required placeholder="psg_..." />
+        </label>
+
+        <label class="field full">
+          <span>Recipients</span>
+          <input id="smsToInput" type="text" required placeholder="+14075550123, +14075550124" />
+        </label>
+
+        <label class="field full">
+          <span>Message</span>
+          <textarea id="smsMessageInput" required placeholder="Type SMS message"></textarea>
+        </label>
+
+        <div class="field full action-row">
+          <button type="submit" class="btn btn-primary">Send SMS</button>
+        </div>
+      </form>
+
+      <section id="smsAnalysisPanel" class="sms-analysis-panel">
+        <div class="panel-head">
+          <h3>SMS Analysis</h3>
+          <span id="smsAnalysisEncodingBadge" class="pill">GSM-7</span>
+        </div>
+
+        <div class="analysis-stats">
+          <article class="analysis-card">
+            <p class="analysis-label">Detected Encoding</p>
+            <p id="smsAnalysisEncoding" class="analysis-value">GSM-7</p>
+          </article>
+          <article class="analysis-card">
+            <p class="analysis-label">Unicode Detected</p>
+            <p id="smsAnalysisUnicode" class="analysis-value">No</p>
+          </article>
+          <article class="analysis-card">
+            <p class="analysis-label">Length / Units</p>
+            <p id="smsAnalysisLength" class="analysis-value">0 chars / 0 units</p>
+          </article>
+          <article class="analysis-card">
+            <p class="analysis-label">Segments</p>
+            <p id="smsAnalysisSegments" class="analysis-value">0</p>
+          </article>
+          <article class="analysis-card">
+            <p class="analysis-label">Per Segment Limit</p>
+            <p id="smsAnalysisLimit" class="analysis-value">160</p>
+          </article>
+          <article class="analysis-card">
+            <p class="analysis-label">Remaining In Segment</p>
+            <p id="smsAnalysisRemaining" class="analysis-value">160</p>
+          </article>
+        </div>
+
+        <div class="analysis-block">
+          <h4>Recipient Validation (E.164)</h4>
+          <p id="smsRecipientSummary" class="muted">No recipients analyzed yet.</p>
+          <div id="smsInvalidRecipients" class="analysis-list muted">No invalid recipients.</div>
+        </div>
+
+        <div class="analysis-block">
+          <h4>Unsupported Characters</h4>
+          <div id="smsUnsupportedCharacters" class="analysis-list muted">All characters are GSM-7 supported.</div>
+        </div>
+
+        <div class="analysis-block">
+          <h4>Multipart Simulation</h4>
+          <div id="smsSegmentPreview" class="analysis-list muted">No message content to split.</div>
+        </div>
+      </section>
+
+      <pre id="smsResult" class="result-box hidden"></pre>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Status Lookup</h2>
+          <p class="panel-subtitle">Fetch status events by request ID using bearer auth or API key.</p>
+        </div>
+      </div>
+
+      <form id="statusForm" class="form-grid">
+        <label class="field">
+          <span>Request ID</span>
+          <input id="statusRequestId" type="text" required />
+        </label>
+
+        <label class="field">
+          <span>API Key (Optional)</span>
+          <input id="statusApiKey" type="text" placeholder="Use bearer token if empty" />
+        </label>
+
+        <div class="field full action-row">
+          <button type="submit" class="btn btn-primary">Fetch Status</button>
+        </div>
+      </form>
+
+      <pre id="statusResult" class="result-box hidden"></pre>
+    </section>
+  </main>
+</div>
+
+<script src="/assets/js/app-common.js"></script>
+<script src="/assets/js/command-panel.js"></script>
+</body>
+</html>

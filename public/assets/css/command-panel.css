@@ -1,0 +1,131 @@
+.environment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.environment-card {
+  border: 1px solid #dbe3ed;
+  border-radius: 14px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.environment-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.environment-head h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.pill {
+  border-radius: 999px;
+  border: 1px solid #bae6fd;
+  background: #f0f9ff;
+  color: #0c4a6e;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.key-table-wrap {
+  margin-top: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.key-table {
+  min-width: 780px;
+}
+
+.key-table th,
+.key-table td {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.sms-analysis-panel {
+  margin-top: 14px;
+  border: 1px solid #dbe3ed;
+  border-radius: 14px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.analysis-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.analysis-card {
+  border: 1px solid #dbe3ed;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 8px 10px;
+}
+
+.analysis-label {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.analysis-value {
+  margin: 6px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.analysis-block {
+  margin-top: 12px;
+}
+
+.analysis-block h4 {
+  margin: 0 0 6px;
+}
+
+.analysis-list {
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 13px;
+}
+
+.analysis-list ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.analysis-list li {
+  margin: 0 0 6px;
+}
+
+@media (max-width: 680px) {
+  .environment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .environment-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 980px) {
+  .environment-grid {
+    grid-template-columns: 1fr;
+  }
+}

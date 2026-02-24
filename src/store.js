@@ -2,6 +2,9 @@ const crypto = require('crypto');
 const { getPool } = require('./db');
 
 const SESSION_TTL_DAYS = Number(process.env.SESSION_TTL_DAYS || 30);
+const DEFAULT_LOG_RETENTION_DAYS = 2;
+const MIN_LOG_RETENTION_DAYS = 1;
+const MAX_LOG_RETENTION_DAYS = 365;
 const USER_ROLES = new Set(['super_admin', 'admin', 'user']);
 
 function toIso(value) {
@@ -75,6 +78,15 @@ function coerceBoolean(value, fallback = false) {
         return false;
     }
     return fallback;
+}
+
+function coerceInteger(value, fallback, min, max) {
+    const parsed = Number.parseInt(String(value ?? ''), 10);
+    if (!Number.isInteger(parsed)) {
+        return fallback;
+    }
+
+    return Math.min(max, Math.max(min, parsed));
 }
 
 function isValidEmail(email) {
@@ -190,6 +202,21 @@ async function isRegistrationEnabled() {
 async function setRegistrationEnabled(enabled) {
     const normalized = coerceBoolean(enabled, true);
     await setGatewaySetting('registration_enabled', normalized ? '1' : '0');
+    return normalized;
+}
+
+async function getLogRetentionDays() {
+    const setting = await getGatewaySetting('log_retention_days');
+    if (setting === null) {
+        return DEFAULT_LOG_RETENTION_DAYS;
+    }
+
+    return coerceInteger(setting, DEFAULT_LOG_RETENTION_DAYS, MIN_LOG_RETENTION_DAYS, MAX_LOG_RETENTION_DAYS);
+}
+
+async function setLogRetentionDays(days) {
+    const normalized = coerceInteger(days, DEFAULT_LOG_RETENTION_DAYS, MIN_LOG_RETENTION_DAYS, MAX_LOG_RETENTION_DAYS);
+    await setGatewaySetting('log_retention_days', String(normalized));
     return normalized;
 }
 
@@ -1101,6 +1128,8 @@ module.exports = {
     hasSuperAdmin,
     isRegistrationEnabled,
     setRegistrationEnabled,
+    getLogRetentionDays,
+    setLogRetentionDays,
     listUsersForManagement,
     getUserById,
     createManagedUser,

@@ -25,12 +25,21 @@ Persistence is backed by MySQL and SQL migrations in `migrations/`.
 - Device WebSocket channel: `ws://<host>:8090/ws/device?pin=<environment-pin>&deviceId=...`
 - Environment APIs: `/api/environments`, `/api/environments/:environmentId/api-keys`
 - SMS send API: `POST /api/send-sms` (environment API key required)
+- SMS analysis API: `POST /api/sms/analyze`
+  - GSM-7 encoding detection
+  - Unicode detection
+  - auto length calculation and per-segment limits
+  - E.164 recipient validation with reasons
+  - multipart simulation preview
 - Delivery status API: `GET /api/status/:requestId`
 - Account views: `/api/account/devices`, `/api/account/logs`
+  - delete account logs: `DELETE /api/account/logs`
+  - save account logs to DB: `POST /api/account/logs/save`
 - Admin APIs:
   - `/api/admin/summary`
   - `/api/admin/settings`
   - `/api/admin/settings/registration`
+  - `/api/admin/settings/log-retention`
   - `/api/admin/users`
   - `/api/admin/devices`
   - `/api/admin/logs`
@@ -41,9 +50,19 @@ Persistence is backed by MySQL and SQL migrations in `migrations/`.
   - Landing page: `GET /`
     - if no super admin: shows **Get Started** flow
     - if super admin exists: shows **Login/Register** buttons
-  - Dashboard app: `GET /dashboard`
-    - account workspace (environments/keys/sms)
-    - super admin/admin management console
+  - Auth page: `GET /dashboard`
+    - login/register form
+  - Command Panel: `GET /command-panel`
+    - **Environments**, **Send SMS**, **Status Lookup**
+    - sidebar navigation to all console pages
+  - Account Activity: `GET /account-activity`
+    - responsive devices/logs view with filters (status, mobile, content, time)
+    - logs section includes **Save Logs To Database** button
+  - Super Admin Dashboard: `GET /super-admin-dashboard`
+    - platform controls and user/device/log management
+    - manual log delete button
+    - auto log cleanup by retention days (default: 2)
+    - logs are persisted in MySQL (`gateway_logs`)
 
 ## Setup
 ```bash
@@ -59,7 +78,7 @@ npm start
 After start:
 1. Open `http://localhost:8090/`
 2. If no super admin exists, click **Get Started** and create first super admin
-3. You will be redirected to dashboard automatically
+3. You will be redirected to super admin dashboard automatically
 
 ## MySQL Bootstrap (Example)
 ```sql
